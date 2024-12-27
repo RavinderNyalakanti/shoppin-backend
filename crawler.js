@@ -67,52 +67,63 @@ async function fetchHTML(url) {
 
 // Check if URL matches product patterns
 function isProductUrl(url) {
-  return PRODUCT_PATTERNS.some((pattern) => pattern.test(url));
+  return PRODUCT_PATTERNS.some((pattern) => pattern.test(url)) &&
+    !url.includes('privacy') &&
+    !url.includes('terms');
 }
 
 // Handle dynamically loaded content
+// Handle dynamically loaded content
 async function handleDynamicContent(url) {
-  const productUrls = new Set();
-  const browser = await puppeteer.launch({ headless: true });
-  const page = await browser.newPage();
-
-  try {
-    await page.goto(url, { waitUntil: 'networkidle2' });
-
-    // Scroll through the page to load dynamic content
-    let previousHeight;
-    do {
-      previousHeight = await page.evaluate('document.body.scrollHeight');
-      await page.evaluate('window.scrollTo(0, document.body.scrollHeight)');
-      await page.waitForTimeout(1000);
-    } while (previousHeight !== (await page.evaluate('document.body.scrollHeight')));
-
-    // Extract product URLs from dynamically loaded content
-    const links = await page.$$eval('a[href]', (anchors) =>
-      anchors
-        .map((a) => a.href)
-        .filter((href) =>
-          PRODUCT_PATTERNS.some((pattern) => pattern.test(href))
-        )
-    );
-
-    links.forEach((link) => productUrls.add(link));
-  } catch (error) {
-    console.error(`Error handling dynamic content for ${url}:`, error.message);
-  } finally {
-    await browser.close();
+    const productUrls = new Set();
+    const browser = await puppeteer.launch({ headless: true });
+    const page = await browser.newPage();
+  
+    try {
+      // Set User-Agent header to mimic a real browser
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+  
+      await page.goto(url, { waitUntil: 'networkidle2' });
+  
+      // Scroll through the page to load dynamic content
+      let previousHeight;
+      do {
+        previousHeight = await page.evaluate('document.body.scrollHeight');
+        await page.evaluate('window.scrollTo(0, document.body.scrollHeight)');
+        await page.waitForTimeout(2000);  // Wait for 2 seconds between scrolls
+      } while (previousHeight !== (await page.evaluate('document.body.scrollHeight')));
+  
+      // Extract product URLs from dynamically loaded content
+      const links = await page.$$eval('a[href]', (anchors) =>
+        anchors
+          .map((a) => a.href)
+          .filter((href) =>
+            PRODUCT_PATTERNS.some((pattern) => pattern.test(href)) &&
+            !href.includes('privacy') &&
+            !href.includes('terms')  // Exclude unwanted URLs
+          )
+      );
+  
+      links.forEach((link) => productUrls.add(link));
+    } catch (error) {
+      console.error(`Error handling dynamic content for ${url}:`, error.message);
+    } finally {
+      await browser.close();
+    }
+  
+    return Array.from(productUrls);
   }
-
-  return Array.from(productUrls);
-}
+  
 
 // Entry point
 (async () => {
   const websites = [
-    'https://example-ecommerce1.com',
-    'https://example-ecommerce2.com',
-    'https://example-ecommerce3.com',
-    // Add more websites here
+    'https://www.amazon.com',
+    'https://www.ebay.com',
+    'https://www.walmart.com',
+    'https://www.bestbuy.com',
+    'https://www.target.com',
+   
   ];
 
   const results = await crawlWebsites(websites);
